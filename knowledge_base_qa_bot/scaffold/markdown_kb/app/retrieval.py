@@ -1,7 +1,7 @@
 import os
 
-from langchain.schema import HumanMessage, SystemMessage
-from langchain_openai import ChatOpenAI
+from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_google_genai import ChatGoogleGenerativeAI
 
 from . import indexer
 
@@ -17,6 +17,14 @@ SYSTEM_PROMPT = """
 #    Each source ID uses filename#heading format.
 # 3. Define fallback behavior when the context lacks the answer.
 # 4. Explicitly prohibit guessing or outside knowledge.
+
+You are a helpful knowledge base Q&A assistant.
+You must answer the QUESTION using ONLY the provided CONTEXT.
+If the CONTEXT does not contain the answer, you must respond with exactly: "I cannot confirm from the knowledge base."
+Do NOT guess, speculate, or use outside knowledge under any circumstances.
+
+When you answer, you MUST cite the sources you used. Cite only the exact source IDs shown in the CONTEXT, which are formatted as [Source: filename#heading].
+Include citations inline, for example: "Refunds take 5-7 days [Source: refund_policy.md#refund-timeline]."
 """
 
 _llm = None
@@ -25,9 +33,9 @@ _llm = None
 def get_llm():
     global _llm
     if _llm is None:
-        _llm = ChatOpenAI(
-            model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
-            request_timeout=20,
+        _llm = ChatGoogleGenerativeAI(
+            model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
+            timeout=20,
             max_retries=1,
         )
     return _llm
@@ -43,7 +51,17 @@ def build_prompt(query: str, ranked_sections: list) -> str:
     # 2. Include heading_path so the model sees the document structure.
     # 3. Include only top sections passed into this function.
     # 4. Place CONTEXT before QUESTION.
-    return f"CONTEXT:\n(no context)\n\nQUESTION:\n{query}"
+    context_blocks = []
+    for section, _score in ranked_sections:
+        block = f"[Source: {section.id}]\n"
+        if section.heading_path:
+            block += f"Path: {' > '.join(section.heading_path)}\n"
+        block += f"{section.content}\n"
+        context_blocks.append(block)
+        
+    context_str = "\n\n".join(context_blocks) if context_blocks else "(no context)"
+    
+    return f"CONTEXT:\n{context_str}\n\nQUESTION:\n{query}"
 
 
 def query(question: str) -> dict:
