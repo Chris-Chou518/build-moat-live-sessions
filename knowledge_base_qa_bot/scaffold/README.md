@@ -18,7 +18,7 @@ POST /index
 POST /chat
 ```
 
-Both folders require an OpenAI API key before running the server:
+Both folders require an OpenAI API key (or GEMINI_API_KEY) before running the server:
 
 ```bash
 export OPENAI_API_KEY="sk-..."
